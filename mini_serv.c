@@ -5,8 +5,6 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <errno.h>
-#include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 
@@ -17,11 +15,11 @@ int still_typing	[65536];
 
 char temp_buff		[4096 * 42];
 char read_buff		[4096 * 42];
-char send_buff		[4096 * 42 + 42];
+char send_buff		[4097 * 42];
 
-fd_set ready_to_read;
-fd_set ready_to_write;
-fd_set active_sockets;
+fd_set read_fds;
+fd_set write_fds;
+fd_set active_fds;
 
 void ft_putstr(char *str)
 {
@@ -29,9 +27,9 @@ void ft_putstr(char *str)
 	write(2, "\n", 1);
 }
 
-void fatal_error(void)
+void str_exit(char *str)
 {
-	ft_putstr("Fatal error");
+	ft_putstr(str);
 	exit(1);
 }
 
@@ -39,7 +37,7 @@ void flush_send_buff(int sender_fd) //send send_buff to everyone except sender
 {
 	for(int fd = 0; fd <= max_fd; fd++)
 	{
-		if(FD_ISSET(fd, &ready_to_write) && sender_fd != fd)
+		if(FD_ISSET(fd, &write_fds) && sender_fd != fd)
 			send(fd, send_buff, strlen(send_buff), 0);
 	}
 }
@@ -56,51 +54,49 @@ void flush_temp_buff(int sender_fd) //send temp_buff to everyone except sender a
 int main(int argc, char **argv)
 {
 	if(argc != 2)
-	{
-		ft_putstr("Wrong number of arguments");
-		exit(1);
-	}
+		str_exit("Wrong number of arguments");
 
 	int client_index = 0;
 
 	uint16_t port = atoi(argv[1]);
 	struct sockaddr_in serveraddr;
-	serveraddr.sin_family = AF_INET;
-	serveraddr.sin_addr.s_addr = (1 << 24) | 127;
-	serveraddr.sin_port = (port >> 8) | (port << 8);
 	socklen_t serveraddr_len = sizeof(serveraddr);
+
+	serveraddr.sin_family = AF_INET;
+	serveraddr.sin_addr.s_addr = htonl(2130706433); //see in main.c : this is provided
+	serveraddr.sin_port = htons(port);
 
 	int master_sock = socket(AF_INET, SOCK_STREAM, 0);
 	if(master_sock == -1)
-		fatal_error();
+		str_exit("Fatal error");
+	max_fd = master_sock;
 
 	if(bind(master_sock, (struct sockaddr*)&serveraddr, serveraddr_len) == -1)
 	{
 		close(master_sock);
-		fatal_error();
+		str_exit("Fatal error");
 	}
 
 	if(listen(master_sock, 128) == -1)
 	{
 		close(master_sock);
-		fatal_error();
+		str_exit("Fatal error");
 	}
 
-	bzero(ids, sizeof(ids));
-	FD_ZERO(&active_sockets);
-	FD_SET(master_sock, &active_sockets);
-	max_fd = master_sock;
+	//bzero(ids, sizeof(ids));
+	FD_ZERO(&active_fds);
+	FD_SET(master_sock, &active_fds);
 
 	while(1)
 	{
-		ready_to_write =	active_sockets;
-		ready_to_read =		active_sockets;
-		if(select(max_fd + 1, &ready_to_read, &ready_to_write, 0, 0) <= 0)
+		write_fds =	active_fds;
+		read_fds =	active_fds;
+		if(select(max_fd + 1, &read_fds, &write_fds, 0, 0) <= 0)
 			continue;
 
 		for (int fd = 0; fd <= max_fd; fd++)
 		{
-			if (FD_ISSET(fd, &ready_to_read))
+			if (FD_ISSET(fd, &read_fds))
 			{
 				if (fd == master_sock)
 				{
@@ -108,7 +104,7 @@ int main(int argc, char **argv)
 					if (client_sock == -1)
 						continue;
 
-					FD_SET(client_sock, &active_sockets);
+					FD_SET(client_sock, &active_fds);
 					ids[client_sock] = client_index++;
 
 					still_typing[client_sock] = 0;
@@ -127,7 +123,7 @@ int main(int argc, char **argv)
 					{
 						sprintf(send_buff, "server: client %d just left\n", ids[fd]);
 						flush_send_buff(fd);
-						FD_CLR(fd, &active_sockets);
+						FD_CLR(fd, &active_fds);
 						close(fd);
 						break;
 					}

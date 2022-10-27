@@ -10,7 +10,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
-int maxFd = 0;
+int max_fd = 0;
 
 int ids				[65536];
 int still_typing	[65536];
@@ -32,7 +32,7 @@ void ft_putstr(char *str)
 
 void send_to_all(int except)
 {
-	for(int fd = 0; fd <= maxFd; fd++)
+	for(int fd = 0; fd <= max_fd; fd++)
 	{
 		if(FD_ISSET(fd, &ready_to_write) && except != fd)
 			send(fd, send_buff, strlen(send_buff), 0);
@@ -81,31 +81,32 @@ int main(int argc, char **argv)
 	bzero(ids, sizeof(ids));
 	FD_ZERO(&active_sockets);
 	FD_SET(master_sock, &active_sockets);
-	maxFd = master_sock;
+	max_fd = master_sock;
 
 	while(1)
 	{
-		ready_to_write = active_sockets;
-		ready_to_read = active_sockets;
-		if(select(maxFd + 1, &ready_to_read, &ready_to_write, 0, 0) <= 0)
+		ready_to_write =	active_sockets;
+		ready_to_read =		active_sockets;
+		if(select(max_fd + 1, &ready_to_read, &ready_to_write, 0, 0) <= 0)
 			continue;
 
-		for(int fd = 0; fd <= maxFd; fd++)
+		for (int fd = 0; fd <= max_fd; fd++)
 		{
-			if(FD_ISSET(fd, &ready_to_read))
+			if (FD_ISSET(fd, &ready_to_read))
 			{
-				if(fd == master_sock)
+				if (fd == master_sock)
 				{
 					int client_sock = accept(fd, (struct sockaddr*)&serveraddr, &serveraddr_len);
-					if(client_sock == -1)
+					if (client_sock == -1)
 						continue;
 
 					FD_SET(client_sock, &active_sockets);
 					ids[client_sock] = client_index++;
 
 					still_typing[client_sock] = 0;
-					if(maxFd < client_sock)
-						maxFd = client_sock;
+
+					if(max_fd < client_sock)
+						max_fd = client_sock;
 
 					sprintf(send_buff, "server: client %d just arrived\n", ids[client_sock]);
 					send_to_all(fd);
@@ -114,7 +115,7 @@ int main(int argc, char **argv)
 				else
 				{
 					int recv_size = recv(fd, read_buff, 4096 * 42, 0);
-					if(recv_size <= 0)
+					if (recv_size <= 0)
 					{
 						sprintf(send_buff, "server: client %d just left\n", ids[fd]);
 						send_to_all(fd);
@@ -124,72 +125,42 @@ int main(int argc, char **argv)
 					}
 					else
 					{
-						/*
-						for(int i = 0, j = 0; i < recv_size; i++, j++)
-						{
-							temp_buff[j] = read_buff[i];
-							if(temp_buff[j] == '\n')
-							{
-								temp_buff[j + 1] = '\0';
-								if(still_typing[fd])
-									sprintf(send_buff, "%s", temp_buff);
-								else
-									sprintf(send_buff, "client %d: %s", ids[fd], temp_buff);
-								still_typing[fd] = 0;
-								send_to_all(fd);
-								j = -1;
-							}
-							else if(i == (recv_size - 1))
-							{
-								temp_buff[j + 1] = '\0';
-								if (still_typing[fd])
-									sprintf(send_buff, "%s", temp_buff);
-								else
-									sprintf(send_buff, "client %d: %s", ids[fd], temp_buff);
-								still_typing[fd] = 1;
-								send_to_all(fd);
-								break;
-							}
-						}
-						*/
-						read_buff[recv_size] = '\0';
-						temp_buff[0] = '\0';
-						send_buff[0] = '\0';
+						read_buff[recv_size] =	'\0';
+						temp_buff[0] =			'\0';
+						send_buff[0] =			'\0';
 
 						sprintf(clis_buff, "client %d: ", ids[fd]);
 
-						//if (!still_typing[fd])
-						//{
-						//	strcat(temp_buff, clis_buff);
-						//	still_typing[fd] = 1;
-						//}
-
-						//bzero(temp_buff, sizeof(temp_buff));
-						char *ret = read_buff;
+						char *ret = read_buff; //reticule on read buffer. Will move from sentences to sentences
 						while (ret[0])
 						{
-							//strcat(send_buff, clis_buff);
-							strcpy(temp_buff, ret);
+							strcpy(temp_buff, ret); //we work on a copy of ret
+
+							if (!still_typing[fd]) //add "client %d:" if it is a new sentence
+								strcat(send_buff, clis_buff);
 
 							int i = 0;
-							while (temp_buff[i])
+							while (1)
 							{
-								if (temp_buff[i] == '\n')
+								if (temp_buff[i] == '\n') //end of sentence :
 								{
-									temp_buff[i + 1] = 0;
-									ret += i + 1;
-									strcat(send_buff, clis_buff);
-									strcat(send_buff, temp_buff);
+									temp_buff[i + 1] = 0; //close temp_buff
+									ret += i + 1; //move ret to new sentence
+									strcat(send_buff, temp_buff); //add temp_buff to send_buff
+									still_typing[fd] = 0; //end of sentence
 									break;
 								}
-								printf("i : %d\n", i);
-
+								if (!temp_buff[i]) //partial end, sentence not finished :
+								{
+									ret += i; //move ret to the end of buffer
+									strcat(send_buff, temp_buff); //add the partial sentence to buff
+									still_typing[fd] = 1; //not the end of a sentence
+									break;
+								}
 								i++;
 							}
 						}
-						//strcat(temp_buff, read_buff);
-						//strcpy(send_buff, temp_buff);
-						send_to_all(fd);
+						send_to_all(fd); //send buff
 					}
 				}
 			}

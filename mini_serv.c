@@ -15,13 +15,13 @@ int max_fd = 0;
 int ids				[65536];
 int still_typing	[65536];
 
+char temp_buff		[4096 * 42];
+char read_buff		[4096 * 42];
+char send_buff		[4096 * 42 + 42];
+
 fd_set ready_to_read;
 fd_set ready_to_write;
 fd_set active_sockets;
-
-char temp_buff	[4096 * 42];
-char read_buff	[4096 * 42];
-char send_buff	[4096 * 42 + 42];
 
 void ft_putstr(char *str)
 {
@@ -62,7 +62,6 @@ int main(int argc, char **argv)
 	}
 
 	int client_index = 0;
-	int i;
 
 	uint16_t port = atoi(argv[1]);
 	struct sockaddr_in serveraddr;
@@ -134,27 +133,28 @@ int main(int argc, char **argv)
 					}
 					else
 					{
-						read_buff[recv_size] =	'\0';
-						temp_buff[0] =			'\0';
+						read_buff[recv_size] =	'\0';								//make read_buff null terminated to iterate over it easily
+						temp_buff[0] =			'\0';								//reset temp_buff
 
 						char *ret = read_buff;										//reticule on read buffer. Will move from sentences to sentences
 						while (ret[0] != '\0')
 						{
 							strcpy(temp_buff, ret);									//we work on a copy of read_buff, at position ret
 
-							i = 0;
+							int i = 0;
 							while (temp_buff[i] != '\0' && temp_buff[i] != '\n')	//i will stop on a \n or \0
 								i++;
-							if (temp_buff[i] == '\0')								//partial end, sentence not finished :
+
+							if (temp_buff[i] == '\0')								//partial end, no more to read
 							{
 								flush_temp_buff(fd);
 								still_typing[fd] = 1;								//not the end of a sentence
 								break;
 							}
-							if (temp_buff[i] == '\n')								//end of sentence
+							if (temp_buff[i] == '\n')								//end of sentence, but maybe there is still more to read
 							{
-								ret += i + 1;										//move ret to new sentence
 								temp_buff[i + 1] = '\0';							//close temp_buff
+								ret += i + 1;										//ret jump to begining of new sentence
 								flush_temp_buff(fd);
 								still_typing[fd] = 0;								//end of sentence
 							}

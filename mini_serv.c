@@ -17,9 +17,9 @@ char temp_buff		[4096 * 42];
 char read_buff		[4096 * 42];
 char send_buff		[4097 * 42];
 
+fd_set all_fds;
 fd_set read_fds;
 fd_set write_fds;
-fd_set active_fds;
 
 void ft_putstr(char *str)
 {
@@ -84,13 +84,13 @@ int main(int argc, char **argv)
 	}
 
 	//bzero(ids, sizeof(ids));
-	FD_ZERO(&active_fds);
-	FD_SET(master_sock, &active_fds);
+	FD_ZERO(&all_fds);
+	FD_SET(master_sock, &all_fds);
 
 	while(1)
 	{
-		write_fds =	active_fds;
-		read_fds =	active_fds;
+		write_fds =	all_fds;
+		read_fds =	all_fds;
 		if(select(max_fd + 1, &read_fds, &write_fds, 0, 0) <= 0)
 			continue;
 
@@ -100,19 +100,19 @@ int main(int argc, char **argv)
 			{
 				if (fd == master_sock)
 				{
-					int client_sock = accept(fd, (struct sockaddr*)&serveraddr, &serveraddr_len);
-					if (client_sock == -1)
+					int new_fd = accept(fd, (struct sockaddr*)&serveraddr, &serveraddr_len);
+					if (new_fd == -1)
 						continue;
 
-					FD_SET(client_sock, &active_fds);
-					ids[client_sock] = client_index++;
+					FD_SET(new_fd, &all_fds);
+					ids[new_fd] = client_index++;
 
-					still_typing[client_sock] = 0;
+					still_typing[new_fd] = 0;
 
-					if(max_fd < client_sock)
-						max_fd = client_sock;
+					if(max_fd < new_fd)
+						max_fd = new_fd;
 
-					sprintf(send_buff, "server: client %d just arrived\n", ids[client_sock]);
+					sprintf(send_buff, "server: client %d just arrived\n", ids[new_fd]);
 					flush_send_buff(fd);
 					break;
 				}
@@ -123,7 +123,7 @@ int main(int argc, char **argv)
 					{
 						sprintf(send_buff, "server: client %d just left\n", ids[fd]);
 						flush_send_buff(fd);
-						FD_CLR(fd, &active_fds);
+						FD_CLR(fd, &all_fds);
 						close(fd);
 						break;
 					}

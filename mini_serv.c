@@ -116,44 +116,41 @@ int main(int argc, char **argv)
 					flush_send_buff(fd);
 					break;
 				}
+				int recv_size = recv(fd, read_buff, 4096 * 42, 0);
+				if (recv_size <= 0)
+				{
+					sprintf(send_buff, "server: client %d just left\n", ids[fd]);
+					flush_send_buff(fd);
+					FD_CLR(fd, &all_fds);
+					close(fd);
+					break;
+				}
 				else
 				{
-					int recv_size = recv(fd, read_buff, 4096 * 42, 0);
-					if (recv_size <= 0)
-					{
-						sprintf(send_buff, "server: client %d just left\n", ids[fd]);
-						flush_send_buff(fd);
-						FD_CLR(fd, &all_fds);
-						close(fd);
-						break;
-					}
-					else
-					{
-						read_buff[recv_size] =	'\0';								//make read_buff null terminated to iterate over it easily
-						temp_buff[0] =			'\0';								//reset temp_buff
+					read_buff[recv_size] =	'\0';								//make read_buff null terminated to iterate over it easily
+					temp_buff[0] =			'\0';								//reset temp_buff
 
-						char *ret = read_buff;										//reticule on read buffer. Will move from sentences to sentences
-						while (ret[0] != '\0')
+					char *ret = read_buff;										//reticule on read buffer. Will move from sentences to sentences
+					while (ret[0] != '\0')
+					{
+						strcpy(temp_buff, ret);									//we work on a copy of read_buff, at position ret
+
+						int i = 0;
+						while (temp_buff[i] != '\0' && temp_buff[i] != '\n')	//i will stop on a \n or \0
+							i++;
+
+						if (temp_buff[i] == '\0')								//partial end, no more to read
 						{
-							strcpy(temp_buff, ret);									//we work on a copy of read_buff, at position ret
-
-							int i = 0;
-							while (temp_buff[i] != '\0' && temp_buff[i] != '\n')	//i will stop on a \n or \0
-								i++;
-
-							if (temp_buff[i] == '\0')								//partial end, no more to read
-							{
-								flush_temp_buff(fd);
-								still_typing[fd] = 1;								//not the end of a sentence
-								break;
-							}
-							if (temp_buff[i] == '\n')								//end of sentence, but maybe there is still more to read
-							{
-								temp_buff[i + 1] = '\0';							//close temp_buff
-								ret += i + 1;										//ret jump to begining of new sentence
-								flush_temp_buff(fd);
-								still_typing[fd] = 0;								//end of sentence
-							}
+							flush_temp_buff(fd);
+							still_typing[fd] = 1;								//not the end of a sentence
+							break;
+						}
+						if (temp_buff[i] == '\n')								//end of sentence, but maybe there is still more to read
+						{
+							temp_buff[i + 1] = '\0';							//close temp_buff
+							ret += i + 1;										//ret jump to begining of new sentence
+							flush_temp_buff(fd);
+							still_typing[fd] = 0;								//end of sentence
 						}
 					}
 				}
